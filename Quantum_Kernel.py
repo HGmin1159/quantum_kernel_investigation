@@ -26,6 +26,7 @@ from qiskit.algorithms.optimizers import *
 
 import qiskit.quantum_info as qi
 from typing import Union
+from tqdm import tqdm
 
 ##################################################################
 # 1. Function for toy experiment about kernel
@@ -160,16 +161,15 @@ def hadamard_test_img(x_1,x_2,kernel):
 # 2. Function for Quantum Kernel Estimation
 ##################################################################
 
-def qke(x1,x2,kernel,shots=1000):
-    gate1,n_qubits = kernel(x1)
-    gate2 = QuantumCircuit.inverse(kernel(x2)[0])
+def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
+    gate1,n_qubits = kernel(x1,layer)
+    gate2 = QuantumCircuit.inverse(kernel(x2,layer)[0])
     
     qc = QuantumCircuit(n_qubits)
     qc.append(gate1.to_gate(),range(n_qubits))
     qc.append(gate2.to_gate(),range(n_qubits))
     qc.measure_all()
     
-    backend = QasmSimulator()
     qc_compiled = transpile(qc, backend)
     job = backend.run(qc_compiled, shots=shots)
     counts = job.result().get_counts ()
@@ -224,13 +224,13 @@ def kernel_circuit(kernel,data):
     qc = QuantumCircuit(num_qubit)
     qc.append(gate,range(num_qubit))
     return(qc)
-def get_gram(data,kernel_fun,layer,shots=1000):
+def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
     for prog in tqdm(range(100)):
         for i in range(n):
             for j in range(i):
-                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,shots=shots)
+                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
                 gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
 
@@ -390,7 +390,7 @@ def kernel_regression_MSE(G_kr,y,index):
 # 4. Function for Kernel
 ##################################################################
 
-def simple_kernel_A(x,repeat=5):
+def simple_kernel_A(x,repeat=1):
     qc = QuantumCircuit(repeat)
     for i in range(repeat) :
         qc.rx(x[0],[i])
@@ -400,7 +400,7 @@ def simple_kernel_A(x,repeat=5):
     encode = qc
     return [encode,repeat]
 
-def kernel_A(x):
+def kernel_A(x,repeat=1):
     r = 2
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -413,14 +413,12 @@ def kernel_A(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_B(x):
+def kernel_B(x,repeat=1):
     r = 2
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
     x = x+np.zeros(r*num_qubits-n).tolist()
-    
     qc = QuantumCircuit(num_qubits,name = "Kernel B")
-    
     for i in range(num_qubits):
         qc.rx(x[i], [i])
     for i in range(num_qubits):
@@ -431,14 +429,12 @@ def kernel_B(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_C(x):
+def kernel_C(x,repeat=1):
     r = 3
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
     x = x+np.zeros(r*num_qubits-n).tolist()
-    
     qc = QuantumCircuit(num_qubits,name = "Kernel C")
-    
     for i in range(num_qubits):
         qc.rx(x[i], [i])
     for i in range(num_qubits):
@@ -449,7 +445,7 @@ def kernel_C(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_D(x):
+def kernel_D(x,repeat=1):
     r = 3
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -465,7 +461,7 @@ def kernel_D(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_E(x):
+def kernel_E(x,repeat=1):
     r = 1
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -481,7 +477,7 @@ def kernel_E(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_F(x):
+def kernel_F(x,repeat=1):
     r = 2
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -497,7 +493,7 @@ def kernel_F(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_G(x):
+def kernel_G(x,repeat=1):
     r = 2
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -517,7 +513,7 @@ def kernel_G(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_H(x):
+def kernel_H(x,repeat=1):
     r = 4
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -540,7 +536,7 @@ def kernel_H(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_I(x):
+def kernel_I(x,repeat=1):
     r = 4
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -563,7 +559,7 @@ def kernel_I(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_J(x):
+def kernel_J(x,repeat=1):
     r = 4
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
@@ -582,7 +578,7 @@ def kernel_J(x):
     encode = qc.to_gate()
     return [encode,num_qubits]
 
-def kernel_K(x):
+def kernel_K(x,repeat=1):
     r = 4
     n = len(x)
     num_qubits = int(((n-1)+ (r-(n-1)%r))/r)
