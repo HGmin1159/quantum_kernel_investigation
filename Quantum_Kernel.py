@@ -234,6 +234,17 @@ def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
                 gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
 
+def get_gram_test(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
+    n = len(data)
+    m = len(test_data)
+    gram_matrix = np.empty(shape=(n,m))
+    for prog in tqdm(range(100)):
+        for i in range(n):
+            for j in range(m):
+                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+    return(gram_matrix)
+
+
 ##################################################################
 # 3. Function for Nonlinear Dimension Reduction
 ##################################################################
