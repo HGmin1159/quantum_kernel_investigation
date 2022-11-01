@@ -22,6 +22,7 @@ from qiskit.providers.aer import QasmSimulator
 
 from qiskit import  QuantumCircuit
 from qiskit.circuit import Parameter
+from qiskit.circuit.library import ZZFeatureMap
 from qiskit.algorithms.optimizers import *
 
 import qiskit.quantum_info as qi
@@ -224,6 +225,7 @@ def kernel_circuit(kernel,data):
     qc = QuantumCircuit(num_qubit)
     qc.append(gate,range(num_qubit))
     return(qc)
+
 def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
@@ -233,7 +235,7 @@ def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
                 gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
                 gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
-
+6t
 def get_gram_test(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     m = len(test_data)
@@ -329,6 +331,7 @@ def GSAVE(Gram_y,Gram_X):
     eigp["value"]  = eig[0]
     V = eigp.sort_values("value",ascending=False).iloc[:,:(n+1)].values.T
     return([np.matmul(lql_X_inv.T,V),eig_score])
+
 def PCA(X):
     eig = np.linalg.eig(np.matmul(X.T,X))
     return([eig[1],eig[0]])
@@ -401,6 +404,13 @@ def kernel_regression_MSE(G_kr,y,index):
 # 4. Function for Kernel
 ##################################################################
 
+def zz_kernel(x,repeat=1):
+    p = len(x)
+    qc = ZZFeatureMap(p, reps=repeat)
+    qc = qc.bind_parameters({qc.parameters[i]:x[i] for i in range(p)})
+    encode = qc
+    return [encode,p]
+    
 def simple_kernel_A(x,repeat=1):
     qc = QuantumCircuit(repeat)
     for i in range(repeat) :
