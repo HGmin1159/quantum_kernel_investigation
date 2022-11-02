@@ -24,9 +24,7 @@ from qiskit import  QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.circuit.library import ZZFeatureMap
 from qiskit.algorithms.optimizers import *
-
-import qiskit.quantum_info as qi
-from typing import Union
+from qiskit_machine_learning.circuit.library import RawFeatureVector
 from tqdm import tqdm
 
 ##################################################################
@@ -178,7 +176,7 @@ def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
     string = ""
     for k in range(n_qubits) : string += "0"
     if (string in counts.keys()): return(counts[string]/shots)
-    else : return 0
+    else : return(0)
 
 def quantum_inner(method,x1,x2,kernel,shots=10000):
     if method == "hadamard" : test = hadamard_test
@@ -235,7 +233,7 @@ def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
                 gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
                 gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
-6t
+
 def get_gram_test(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     m = len(test_data)
@@ -287,10 +285,25 @@ def Gram_gaussian(data,comp,version="H") :
     K = M+M.T-2*U
     sigma = (np.sum(np.sqrt(K))-np.trace(np.sqrt(K)))/n/(n-1)
     gamma = comp/sigma/sigma
-    if(version == "H") :
-        result = np.matmul(Q,np.matmul(np.exp(-K*gamma),Q))
-    if(version == "L") :
-        result = np.concatenate([np.ones((1,n)),np.exp(-K*gamma)])
+    result = np.exp(-K*gamma)
+    return(result)
+
+def Gram_gaussian_test(data1,data2,comp,version="H") :
+    n = data1.shape[0];p = data1.shape[1] 
+    m = data2.shape[0]
+
+    U = np.matmul(data1,data1.T)
+    M = np.outer(np.diag(U),np.ones(shape=(n,1)))
+    K = M+M.T-2*U
+
+    M_new = np.outer(np.diag(U),np.ones(shape=(m,1)))
+    U_new = np.matmul(data1,data2.T)
+    T_new = np.outer(np.diag(np.matmul(data2,data2.T)),np.ones(shape=(n,1)))
+    K_new = M_new+T_new.T-2*U_new
+
+    sigma = (np.sum(np.sqrt(K))-np.trace(np.sqrt(K)))/n/(n-1)
+    gamma = comp/sigma/sigma
+    result = np.exp(-K_new*gamma)
     return(result)
 
 def KPCA(Gram_X,thre = 10**(-8)) :
@@ -311,6 +324,7 @@ def GSIR(Gram_y,Gram_X):
     return([np.matmul(np.matmul(G_X,Ginv),V),eig_score])
 
 def GSAVE(Gram_y,Gram_X):
+    n = Gram_X.shape[0]
     L_y = Gram_y
     L_X = Gram_X
     J = np.outer(np.ones(shape=(n,1)),np.ones(shape=(n,1)))
@@ -382,14 +396,14 @@ def kernel_density(G_kde,index):
     kde = kde.sort_values("index")
     plt.plot(kde.iloc[:,0],kde.iloc[:,1])
     
-def kernel_regression(G_kr,y,index,label=None):
+def kernel_regression(G_kr,y,index,sto_index,label=None):
     kr = pd.DataFrame()
     kr["index"] = index
     kr["estimates"] = np.matmul(G_kr,y[sto_index])/sum(G_kr)
     kr = kr.sort_values("index")
     plt.plot(kr.iloc[:,0],kr.iloc[:,1],label=label)
 
-def kernel_regression_MSE(G_kr,y,index):
+def kernel_regression_MSE(G_kr,y,index,sto_index):
     size = len(y)
     kr = pd.DataFrame()
     kr["index"] = index
@@ -410,7 +424,22 @@ def zz_kernel(x,repeat=1):
     qc = qc.bind_parameters({qc.parameters[i]:x[i] for i in range(p)})
     encode = qc
     return [encode,p]
-    
+
+def exponential_kernel_B(x,repeat=5):
+    qc = QuantumCircuit(repeat)
+    for i in range(repeat) :
+        qc.rx(x[0]*3**i,[i])
+    for i in range(repeat-1) :
+        qc.cx([i],[i+1])
+    qc.cx([repeat-1],[0])
+    for i in range(repeat) :
+        qc.ry(x[1]*3**i,[i])
+    for i in range(repeat-1) :
+        qc.cx([i],[i+1])
+    qc.cx([repeat-1],[0])
+    encode = qc
+    return [encode,repeat]
+
 def simple_kernel_A(x,repeat=1):
     qc = QuantumCircuit(repeat)
     for i in range(repeat) :
