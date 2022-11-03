@@ -22,7 +22,6 @@ from qiskit.providers.aer import QasmSimulator
 
 from qiskit import  QuantumCircuit
 from qiskit.circuit import Parameter
-from qiskit.circuit.library import ZZFeatureMap
 from qiskit.algorithms.optimizers import *
 from qiskit_machine_learning.circuit.library import RawFeatureVector
 from tqdm import tqdm
@@ -223,7 +222,6 @@ def kernel_circuit(kernel,data):
     qc = QuantumCircuit(num_qubit)
     qc.append(gate,range(num_qubit))
     return(qc)
-
 def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
@@ -345,7 +343,6 @@ def GSAVE(Gram_y,Gram_X):
     eigp["value"]  = eig[0]
     V = eigp.sort_values("value",ascending=False).iloc[:,:(n+1)].values.T
     return([np.matmul(lql_X_inv.T,V),eig_score])
-
 def PCA(X):
     eig = np.linalg.eig(np.matmul(X.T,X))
     return([eig[1],eig[0]])
@@ -418,6 +415,7 @@ def kernel_regression_MSE(G_kr,y,index,sto_index):
 # 4. Function for Kernel
 ##################################################################
 
+<<<<<<< HEAD
 def zz_kernel(x,repeat=1):
     p = len(x)
     qc = ZZFeatureMap(p, reps=repeat)
@@ -440,6 +438,8 @@ def exponential_kernel_B(x,repeat=5):
     encode = qc
     return [encode,repeat]
 
+=======
+>>>>>>> parent of 3d925f9 (수정)
 def simple_kernel_A(x,repeat=1):
     qc = QuantumCircuit(repeat)
     for i in range(repeat) :
