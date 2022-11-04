@@ -415,7 +415,6 @@ def kernel_regression_MSE(G_kr,y,index,sto_index):
 # 4. Function for Kernel
 ##################################################################
 
-<<<<<<< HEAD
 def zz_kernel(x,repeat=1):
     p = len(x)
     qc = ZZFeatureMap(p, reps=repeat)
@@ -438,8 +437,6 @@ def exponential_kernel_B(x,repeat=5):
     encode = qc
     return [encode,repeat]
 
-=======
->>>>>>> parent of 3d925f9 (수정)
 def simple_kernel_A(x,repeat=1):
     qc = QuantumCircuit(repeat)
     for i in range(repeat) :
