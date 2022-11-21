@@ -460,7 +460,7 @@ def kernel_A(x,repeat=1):
         qc.rx(x[i], [i])
     for i in range(num_qubits):
         qc.rz(x[i+num_qubits], [i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_B(x,repeat=1):
@@ -476,7 +476,7 @@ def kernel_B(x,repeat=1):
     for i in range(num_qubits-1):
         qc.cx([i+1],[i])
     qc.cx([0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_C(x,repeat=1):
@@ -492,7 +492,7 @@ def kernel_C(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[i+2*num_qubits],[i+1],[i])
     qc.crz(x[3*num_qubits-1],[0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_D(x,repeat=1):
@@ -508,7 +508,7 @@ def kernel_D(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[i+2*num_qubits],[i+1],[i])
     qc.crx(x[3*num_qubits-1],[0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_E(x,repeat=1):
@@ -524,7 +524,7 @@ def kernel_E(x,repeat=1):
     qc.cz(num_qubits-1,0)
     for i in range(num_qubits):
         qc.rz(x[i],[i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_F(x,repeat=1):
@@ -540,7 +540,7 @@ def kernel_F(x,repeat=1):
     qc.cz(num_qubits-1,0)
     for i in range(num_qubits):
         qc.ry(x[i+num_qubits],[i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_G(x,repeat=1):
@@ -560,7 +560,7 @@ def kernel_G(x,repeat=1):
     for i in range(num_qubits-1):
         qc.cx([i],[i+1])
     qc.cx(num_qubits-1,0)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_H(x,repeat=1):
@@ -583,7 +583,7 @@ def kernel_H(x,repeat=1):
         qc.rz(x[3*num_qubits+i],[i])
     for i in range(later):
         qc.cx([2*i+2],[2*i+1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_I(x,repeat=1):
@@ -606,7 +606,7 @@ def kernel_I(x,repeat=1):
         qc.rz(x[3*num_qubits+i],[i])
     for i in range(later):
         qc.cz([2*i+2],[2*i+1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_J(x,repeat=1):
@@ -625,7 +625,7 @@ def kernel_J(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[3*num_qubits+i],[i+1],[i])
     qc.crz(x[4*num_qubits-1],0,num_qubits-1)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_K(x,repeat=1):
@@ -645,6 +645,6 @@ def kernel_K(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crx(x[3*num_qubits+i],[i+1],[i])
     qc.crx(x[4*num_qubits-1],0,num_qubits-1)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
