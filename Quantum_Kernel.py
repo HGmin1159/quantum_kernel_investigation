@@ -178,6 +178,34 @@ def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
     if (string in counts.keys()): return(counts[string]/shots)
     else : return(0)
 
+def qke_multi(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
+    n = len(x1)
+    k = n//32
+    layer = 1
+    qc = QuantumCircuit(8,8)
+    for i in range(k):
+        gate1,n_qubits = kernel(x1[i*32:(i+1)*32],layer)
+        qc.append(gate1.to_gate(),range(8))
+    gate1,n_qubits = kernel(x1[k*32:n],layer)
+    qc.append(gate1.to_gate(),range(n_qubits))
+
+    for i in range(k):
+        gate2 = QuantumCircuit.inverse(kernel(x2[i*32:(i+1)*32],layer)[0])
+        qc.append(gate2.to_gate(),range(8))
+    gate2 = QuantumCircuit.inverse(kernel(x2[k*32:n],layer)[0])
+    qc.append(gate1.to_gate(),range(n_qubits))
+    
+    qc.measure_all()
+
+    qc_compiled = transpile(qc, backend)
+    job = backend.run(qc_compiled, shots=shots)
+    counts = job.result().get_counts ()
+    
+    string = ""
+    for k in range(n_qubits) : string += "0"
+    if (string in counts.keys()): return(counts[string]/shots)
+    else : return(0)
+
 def quantum_inner(method,x1,x2,kernel,shots=10000):
     if method == "hadamard" : test = hadamard_test
     elif method == "swap" : test = swap_test
@@ -227,22 +255,39 @@ def kernel_circuit(kernel,data):
 def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
-    for prog in tqdm(range(100)):
-        for i in range(n):
-            for j in range(i):
-                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
-                gram_matrix[j,i] = gram_matrix[i,j]
+    for i in tqdm(range(n)):
+        for j in range(i):
+            gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+            gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
 
 def get_gram_test(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     m = len(test_data)
     gram_matrix = np.empty(shape=(n,m))
-    for prog in tqdm(range(100)):
-        for i in range(n):
-            for j in range(m):
-                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+    for i in tqdm(range(n)):
+        for j in range(m):
+            gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
     return(gram_matrix)
+
+def get_gram_multi(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
+    n = len(data)
+    gram_matrix = np.identity(n)
+    for i in tqdm(range(n)):
+        for j in range(i):
+            gram_matrix[i,j] = qke_multi(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+            gram_matrix[j,i] = gram_matrix[i,j]
+    return(gram_matrix)
+
+def get_gram_test_multi(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
+    n = len(data)
+    m = len(test_data)
+    gram_matrix = np.empty(shape=(n,m))
+    for i in tqdm(range(n)):
+        for j in range(m):
+            gram_matrix[i,j] = qke_multi(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+    return(gram_matrix)
+
 
 
 ##################################################################
