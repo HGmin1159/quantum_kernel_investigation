@@ -25,6 +25,9 @@ from qiskit.circuit import Parameter
 from qiskit.algorithms.optimizers import *
 from qiskit_machine_learning.circuit.library import RawFeatureVector
 from tqdm import tqdm
+import cvxopt as opt
+from cvxopt import matrix
+from cvxopt.solvers import qp
 
 ##################################################################
 # 1. Function for toy experiment about kernel
@@ -177,6 +180,35 @@ def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
     if (string in counts.keys()): return(counts[string]/shots)
     else : return(0)
 
+def qke_multi(x1,x2,kernel,layer=1, backend=QasmSimulator(),shots=1000):
+    n = len(x1)
+    k = n//32
+    layer = 1
+    qc = QuantumCircuit(8)
+    for i in range(k):
+        gate1,n_qubits = kernel(x1[i*32:(i+1)*32],layer)
+        qc.append(gate1,range(8))
+    gate1,n_qubits = kernel(x1[k*32:n],layer)
+    qc.append(gate1,range(n_qubits))
+
+    gate2 = QuantumCircuit.inverse(kernel(x2[k*32:n],layer)[0])
+    qc.append(gate2,range(n_qubits))
+    for i in range(k-1,-1,-1):
+        gate2 = QuantumCircuit.inverse(kernel(x2[i*32:(i+1)*32],layer)[0])
+        qc.append(gate2,range(8))
+        
+    qc.measure_all()
+
+    shots = 5000
+    qc_compiled = transpile(qc, backend=QasmSimulator())
+    backend=QasmSimulator()
+    job = backend.run(qc_compiled, shots=shots)
+    counts = job.result().get_counts()
+    string = ""
+    for k in range(8) : string += "0"
+    if (string in counts.keys()): return(counts[string]/shots)
+    else : return(0)
+
 def quantum_inner(method,x1,x2,kernel,shots=10000):
     if method == "hadamard" : test = hadamard_test
     elif method == "swap" : test = swap_test
@@ -222,26 +254,42 @@ def kernel_circuit(kernel,data):
     qc = QuantumCircuit(num_qubit)
     qc.append(gate,range(num_qubit))
     return(qc)
+
 def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
-    for prog in tqdm(range(100)):
-        for i in range(n):
-            for j in range(i):
-                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
-                gram_matrix[j,i] = gram_matrix[i,j]
+    for i in tqdm(range(n)):
+        for j in range(i):
+            gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+            gram_matrix[j,i] = gram_matrix[i,j]
     return(gram_matrix)
 
 def get_gram_test(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     m = len(test_data)
     gram_matrix = np.empty(shape=(n,m))
-    for prog in tqdm(range(100)):
-        for i in range(n):
-            for j in range(m):
-                gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+    for i in tqdm(range(n)):
+        for j in range(m):
+            gram_matrix[i,j] = qke(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
     return(gram_matrix)
 
+def get_gram_multi(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
+    n = len(data)
+    gram_matrix = np.identity(n)
+    for i in tqdm(range(n)):
+        for j in range(i):
+            gram_matrix[i,j] = qke_multi(data.iloc[i,:].tolist(),data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+            gram_matrix[j,i] = gram_matrix[i,j]
+    return(gram_matrix)
+
+def get_gram_test_multi(data,test_data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
+    n = len(data)
+    m = len(test_data)
+    gram_matrix = np.empty(shape=(n,m))
+    for i in tqdm(range(n)):
+        for j in range(m):
+            gram_matrix[i,j] = qke_multi(data.iloc[i,:].tolist(),test_data.iloc[j,:].tolist(),kernel_fun,layer,backend,shots=shots)
+    return(gram_matrix)
 
 ##################################################################
 # 3. Function for Nonlinear Dimension Reduction
@@ -268,13 +316,10 @@ def Gram_discrete(data,version="H") :
     J = np.outer(np.ones(shape=(n,1)),np.ones(shape=(n,1)))
     Q = np.identity(n)-J/n
     K = [[1 if i==j else 0 for j in data] for i in data]
-    if(version == "H"):
-        dis = np.matmul(np.matmul(Q,K),Q)
-    if(version == "L"):
-        dis = np.concatenate([np.ones((1,n)),K])
+    dis = np.matmul(np.matmul(Q,K),Q)
     return(dis)
 
-def Gram_gaussian(data,comp,version="H") :
+def Gram_gaussian(data,comp) :
     n = data.shape[0];p = data.shape[1] 
     U = np.matmul(data,data.T)
     M = np.outer(np.diag(U),np.ones(shape=(n,1)))
@@ -286,7 +331,7 @@ def Gram_gaussian(data,comp,version="H") :
     result = np.exp(-K*gamma)
     return(result)
 
-def Gram_gaussian_test(data1,data2,comp,version="H") :
+def Gram_gaussian_test(data1,data2,comp) :
     n = data1.shape[0];p = data1.shape[1] 
     m = data2.shape[0]
 
@@ -303,23 +348,6 @@ def Gram_gaussian_test(data1,data2,comp,version="H") :
     gamma = comp/sigma/sigma
     result = np.exp(-K_new*gamma)
     return(result)
-
-def KPCA(Gram_X,thre = 10**(-8)) :
-    G = Gram_X
-    eig = np.linalg.eig(G)
-    V = np.real(eig[1])
-    U = np.matmul(matpower(G,-0.5,10**(-8)),V)
-    return([np.matmul(G,U),eig[0]])
-
-def GSIR(Gram_y,Gram_X):
-    G_y = Gram_y
-    G_X = Gram_X
-    Ginv = np.linalg.pinv(G_X)
-    candi_matrix = np.matmul(np.matmul(np.matmul(np.matmul(np.matmul(Ginv,G_X),G_y),Ginv),G_X),Ginv)
-    eig = np.linalg.eig(candi_matrix)
-    V = np.real(eig[1])
-    eig_score = eig[0]
-    return([np.matmul(np.matmul(G_X,Ginv),V),eig_score])
 
 def GSAVE(Gram_y,Gram_X):
     n = Gram_X.shape[0]
@@ -410,6 +438,78 @@ def kernel_regression_MSE(G_kr,y,index,sto_index):
     result = sum((y_pred-y)**2)/size
     return(result)
 
+class KPCA():
+    def __init__(self,thre = 10**(-8)):
+        self.thre = thre
+     
+    def fit(self,kernel_matrix):
+        kernel_matrix = np.array(kernel_matrix)
+        eig = np.linalg.eig(kernel_matrix)
+        V = np.real(eig[1])
+        U = np.matmul(matpower(kernel_matrix,-0.5,self.thre),V)
+        self.coef = np.array(U)
+        self.train_gram = kernel_matrix
+        self.eigvalue = eig[0]
+    
+    def transform(self,kernel_matrix_pred):
+        return(np.matmul(np.array(kernel_matrix_pred).T,self.coef))
+
+class GSIR():
+    def __init__(self,lamda = 0.001, type="Discrete",comp=3):
+        self.lamda = lamda
+        self.type = type
+        self.comp = comp
+    
+    def fit(self,kernel_matrix,y_train):
+        if self.type == "Discrete" : G_y = Gram_discrete(y_train)
+        elif self.type == "Continuous" : G_y = Gram_gaussian(y_train,comp=self.comp)
+        G_X = kernel_matrix
+        n = len(G_X)
+        Ginv = np.linalg.pinv(G_X+self.lamda*np.identity(n))
+        candi_matrix = np.matmul(np.matmul(np.matmul(np.matmul(np.matmul(Ginv,G_X),G_y),Ginv),G_X),Ginv)
+        eig = np.linalg.eig(candi_matrix)
+        V = np.real(eig[1])
+
+        self.coef = np.matmul(Ginv,V)
+        self.train_gram = kernel_matrix
+        self.eigvalue = eig[0]
+
+    def transform(self,kernel_matrix_pred):
+        return(np.matmul(np.array(kernel_matrix_pred).T,self.coef))
+
+class SVM():
+    def __init__(self,lamda=1):
+        self.lamda = lamda
+    
+    def fit(self,kernel_matrix,y_train):
+        n = len(kernel_matrix[0])
+        upbound = 2*n*self.lamda
+        Q = matrix(kernel_matrix)
+        r = matrix(np.array([-1.0 for i in range(n)]))
+
+        # Add constraint matrices and vectors
+        G = matrix(np.concatenate([-np.eye(n),np.eye(n)]))
+        h = matrix([0.0 for i in range(n)] + [upbound**(-1) for i in range(n)])
+        A = matrix(y_train).T
+        b = matrix(0.0)
+
+        # Solve
+        sol = qp(Q,-r,G,h,A,b, kktsolver='ldl', options={'kktreg':1e-9,'show_progress': False})
+
+        c_sol = [sol["x"]]
+        self.coef = [i for i in c_sol[0]]
+        self.train_gram = kernel_matrix
+        self.y_train = y_train
+    
+    def predict(self,kernel_matrix_pred):
+        y_pred = np.sign(np.matmul((self.coef * self.y_train),kernel_matrix_pred))
+        return(y_pred)
+    
+    def score(self,kernel_matrix_pred,y_true):
+        n = len(y_true)
+        y_pred = np.sign(np.matmul((self.coef * self.y_train),kernel_matrix_pred))
+        y_true = np.array(y_true)
+        return(sum(y_pred==y_true)/n)
 
 ##################################################################
 # 4. Function for Kernel
@@ -457,7 +557,7 @@ def kernel_A(x,repeat=1):
         qc.rx(x[i], [i])
     for i in range(num_qubits):
         qc.rz(x[i+num_qubits], [i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_B(x,repeat=1):
@@ -473,7 +573,7 @@ def kernel_B(x,repeat=1):
     for i in range(num_qubits-1):
         qc.cx([i+1],[i])
     qc.cx([0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_C(x,repeat=1):
@@ -489,7 +589,7 @@ def kernel_C(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[i+2*num_qubits],[i+1],[i])
     qc.crz(x[3*num_qubits-1],[0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_D(x,repeat=1):
@@ -505,7 +605,7 @@ def kernel_D(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[i+2*num_qubits],[i+1],[i])
     qc.crx(x[3*num_qubits-1],[0],[num_qubits-1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_E(x,repeat=1):
@@ -521,7 +621,7 @@ def kernel_E(x,repeat=1):
     qc.cz(num_qubits-1,0)
     for i in range(num_qubits):
         qc.rz(x[i],[i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_F(x,repeat=1):
@@ -537,7 +637,7 @@ def kernel_F(x,repeat=1):
     qc.cz(num_qubits-1,0)
     for i in range(num_qubits):
         qc.ry(x[i+num_qubits],[i])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_G(x,repeat=1):
@@ -557,7 +657,7 @@ def kernel_G(x,repeat=1):
     for i in range(num_qubits-1):
         qc.cx([i],[i+1])
     qc.cx(num_qubits-1,0)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_H(x,repeat=1):
@@ -580,7 +680,7 @@ def kernel_H(x,repeat=1):
         qc.rz(x[3*num_qubits+i],[i])
     for i in range(later):
         qc.cx([2*i+2],[2*i+1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_I(x,repeat=1):
@@ -603,7 +703,7 @@ def kernel_I(x,repeat=1):
         qc.rz(x[3*num_qubits+i],[i])
     for i in range(later):
         qc.cz([2*i+2],[2*i+1])
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_J(x,repeat=1):
@@ -622,7 +722,7 @@ def kernel_J(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crz(x[3*num_qubits+i],[i+1],[i])
     qc.crz(x[4*num_qubits-1],0,num_qubits-1)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
 def kernel_K(x,repeat=1):
@@ -642,6 +742,6 @@ def kernel_K(x,repeat=1):
     for i in range(num_qubits-1):
         qc.crx(x[3*num_qubits+i],[i+1],[i])
     qc.crx(x[4*num_qubits-1],0,num_qubits-1)
-    encode = qc.to_gate()
+    encode = qc
     return [encode,num_qubits]
 
