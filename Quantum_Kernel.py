@@ -243,18 +243,16 @@ def kernel_test(x):
     return [encode,1]
 
 def kernel_circuit(kernel,data):
-    
     if type(data) == int : 
         theta = []
         for i in range(data):
             theta = theta+[Parameter("theta"+str(i))]
     else : theta = data
-        
     gate,num_qubit = kernel(theta)
     qc = QuantumCircuit(num_qubit)
     qc.append(gate,range(num_qubit))
     return(qc)
-
+    
 def get_gram(data,kernel_fun,layer,backend = QasmSimulator(),shots=1000):
     n = len(data)
     gram_matrix = np.identity(n)
@@ -442,7 +440,7 @@ class KPCA():
     def __init__(self,thre = 10**(-8)):
         self.thre = thre
      
-    def fit(self,kernel_matrix):
+    def fit(self,kernel_matrix) :
         kernel_matrix = np.array(kernel_matrix)
         eig = np.linalg.eig(kernel_matrix)
         V = np.real(eig[1])
@@ -451,7 +449,7 @@ class KPCA():
         self.train_gram = kernel_matrix
         self.eigvalue = eig[0]
     
-    def transform(self,kernel_matrix_pred):
+    def transform(self,kernel_matrix_pred) :
         return(np.matmul(np.array(kernel_matrix_pred).T,self.coef))
 
 class GSIR():
@@ -487,13 +485,11 @@ class SVM():
         Q = matrix(kernel_matrix)
         r = matrix(np.array([-1.0 for i in range(n)]))
 
-        # Add constraint matrices and vectors
         G = matrix(np.concatenate([-np.eye(n),np.eye(n)]))
         h = matrix([0.0 for i in range(n)] + [upbound**(-1) for i in range(n)])
         A = matrix(y_train).T
         b = matrix(0.0)
 
-        # Solve
         sol = qp(Q,-r,G,h,A,b, kktsolver='ldl', options={'kktreg':1e-9,'show_progress': False})
 
         c_sol = [sol["x"]]
@@ -510,6 +506,7 @@ class SVM():
         y_pred = np.sign(np.matmul((self.coef * self.y_train),kernel_matrix_pred))
         y_true = np.array(y_true)
         return(sum(y_pred==y_true)/n)
+
 
 ##################################################################
 # 4. Function for Kernel
