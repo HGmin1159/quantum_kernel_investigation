@@ -1,0 +1,7 @@
+,Data Set 1,Data Set 2,Data Set 3,Data Set 4,Data Set 5
+Gaussian_Train,0.97,0.9,1.0,0.95,0.86
+Gaussian_Test,0.97,0.94,1.0,0.93,0.81
+zz_kernel_Train,0.75,0.88,0.76,0.78,0.64
+zz_kerenl_Test,0.7,0.88,0.69,0.71,0.53
+custom_kernel_Train,0.84,0.9,0.81,0.79,0.86
+custom_kerenl_Test,0.94,0.95,1.0,0.91,0.84

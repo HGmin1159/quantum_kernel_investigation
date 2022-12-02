@@ -19,6 +19,7 @@ from qiskit import QuantumCircuit , transpile
 from qiskit.visualization import *
 from qiskit.tools.jupyter import *
 from qiskit.providers.aer import QasmSimulator
+from qiskit.circuit.library import ZZFeatureMap
 
 from qiskit import  QuantumCircuit
 from qiskit.circuit import Parameter
@@ -104,7 +105,6 @@ def swap_inner(x1,x2,kernel,n_kernel,shots=10000):
     return(quantum_inner)
 
 def swap_test(x_1,x_2,kernel):
-    
     First_kernel = kernel(x_1)
     Second_kernel = kernel(x_2)
     n_kernel = First_kernel[1]
@@ -164,11 +164,14 @@ def hadamard_test_img(x_1,x_2,kernel):
 
 def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
     gate1,n_qubits = kernel(x1,layer)
-    gate2 = QuantumCircuit.inverse(kernel(x2,layer)[0])
-    
     qc = QuantumCircuit(n_qubits)
-    qc.append(gate1.to_gate(),range(n_qubits))
-    qc.append(gate2.to_gate(),range(n_qubits))
+    for i in range(layer):
+        gate1,n_qubits = kernel([j*3**i for j in x1],layer)
+        qc.append(gate1.to_gate(),range(n_qubits))    
+
+    for i in range(layer):
+        gate2 = QuantumCircuit.inverse(kernel([j*3**i for j in x2],layer)[0])
+        qc.append(gate2.to_gate(),range(n_qubits))
     qc.measure_all()
     
     qc_compiled = transpile(qc, backend)
@@ -293,6 +296,9 @@ def get_gram_test_multi(data,test_data,kernel_fun,layer,backend = QasmSimulator(
 # 3. Function for Nonlinear Dimension Reduction
 ##################################################################
 
+def sym(X) : 
+    return((X+X.T)/2)
+
 def stand(x) : 
     dia = np.apply_along_axis(np.var,0,x)
     dia[dia!=0] = dia[dia!=0]**(-0.5)
@@ -321,9 +327,8 @@ def Gram_gaussian(data,comp) :
     n = data.shape[0];p = data.shape[1] 
     U = np.matmul(data,data.T)
     M = np.outer(np.diag(U),np.ones(shape=(n,1)))
-    J = np.outer(np.ones(shape=(n,1)),np.ones(shape=(n,1)))
-    Q = np.identity(n)-J/n
     K = M+M.T-2*U
+    K[K<0] = 0 
     sigma = (np.sum(np.sqrt(K))-np.trace(np.sqrt(K)))/n/(n-1)
     gamma = comp/sigma/sigma
     result = np.exp(-K*gamma)
@@ -336,7 +341,7 @@ def Gram_gaussian_test(data1,data2,comp) :
     U = np.matmul(data1,data1.T)
     M = np.outer(np.diag(U),np.ones(shape=(n,1)))
     K = M+M.T-2*U
-
+    K[K<0] = 0 
     M_new = np.outer(np.diag(U),np.ones(shape=(m,1)))
     U_new = np.matmul(data1,data2.T)
     T_new = np.outer(np.diag(np.matmul(data2,data2.T)),np.ones(shape=(n,1)))
@@ -441,9 +446,11 @@ class KPCA():
         self.thre = thre
      
     def fit(self,kernel_matrix) :
+        n = len(kernel_matrix)
         kernel_matrix = np.array(kernel_matrix)
-        eig = np.linalg.eig(kernel_matrix)
-        V = np.real(eig[1])
+        eig = np.linalg.eigh(kernel_matrix)
+        invorder = [n-i-1 for i in range(n)]
+        V = eig[1][:,invorder]
         U = np.matmul(matpower(kernel_matrix,-0.5,self.thre),V)
         self.coef = np.array(U)
         self.train_gram = kernel_matrix
@@ -453,22 +460,31 @@ class KPCA():
         return(np.matmul(np.array(kernel_matrix_pred).T,self.coef))
 
 class GSIR():
-    def __init__(self,lamda = 0.001, type="Discrete",comp=3):
-        self.lamda = lamda
-        self.type = type
+    def __init__(self,lamda_x = 0.001,lamda_y = 0.001, y_type="Discrete",a_type = "Inverse",comp=3):
+        self.lamda_x = lamda_x
+        self.lamda_y = lamda_y
+        self.type = y_type
         self.comp = comp
-    
-    def fit(self,kernel_matrix,y_train):
-        if self.type == "Discrete" : G_y = Gram_discrete(y_train)
-        elif self.type == "Continuous" : G_y = Gram_gaussian(y_train,comp=self.comp)
-        G_X = kernel_matrix
-        n = len(G_X)
-        Ginv = np.linalg.pinv(G_X+self.lamda*np.identity(n))
-        candi_matrix = np.matmul(np.matmul(np.matmul(np.matmul(np.matmul(Ginv,G_X),G_y),Ginv),G_X),Ginv)
-        eig = np.linalg.eig(candi_matrix)
-        V = np.real(eig[1])
+        self.a_type = a_type
 
-        self.coef = np.matmul(Ginv,V)
+    def fit(self,kernel_matrix,y_train):
+        n = len(kernel_matrix)
+        Q = np.identity(n)-np.ones((n,n))/n
+        if self.type == "Discrete" : 
+            G_y = Gram_discrete(y_train)
+            G_yinv = np.linalg.pinv(sym(G_y))
+        elif self.type == "Continuous" : 
+            G_y = Gram_gaussian(y_train,comp=self.comp)
+            G_yinv = np.linalg.pinv(sym(G_y+self.lamda_y * np.identity(n)))
+        G_X = kernel_matrix
+        Ginv = np.linalg.pinv(sym(G_X+self.lamda_x*np.identity(n)))
+        
+        if self.a_type == "Identity" : candi_matrix = np.matmul(np.matmul(np.matmul(np.matmul(Ginv,G_X),G_y),G_X),Ginv)
+        elif self.a_type == "Inverse" : candi_matrix = np.matmul(np.matmul(np.matmul(np.matmul(np.matmul(Ginv,G_X),G_y),G_yinv),G_X),Ginv)
+        eig = np.linalg.eigh(candi_matrix)
+        invorder = [n-i-1 for i in range(n)]
+        V = eig[1][:,invorder]
+        self.coef = np.matmul(np.matmul(Q,Ginv),V)
         self.train_gram = kernel_matrix
         self.eigvalue = eig[0]
 
