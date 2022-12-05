@@ -186,22 +186,25 @@ def qke(x1,x2,kernel,layer=5, backend=QasmSimulator(),shots=1000):
 def qke_multi(x1,x2,kernel,layer=1, backend=QasmSimulator(),shots=1000):
     n = len(x1)
     k = n//32
-    layer = 1
     qc = QuantumCircuit(8)
-    for i in range(k):
-        gate1,n_qubits = kernel(x1[i*32:(i+1)*32],layer)
-        qc.append(gate1,range(8))
-    gate1,n_qubits = kernel(x1[k*32:n],layer)
-    qc.append(gate1,range(n_qubits))
+    for j in range(layer):
+        for i in range(k):
+            x_temp = [k*3**j for k in x1[i*32:(i+1)*32]]
+            gate1,n_qubits = kernel(x_temp,layer)
+            qc.append(gate1,range(8))
+        x_temp = [k*3**j for k in x1[k*32:n]]
+        gate1,n_qubits = kernel(x_temp,layer)
+        qc.append(gate1,range(n_qubits))
 
-    gate2 = QuantumCircuit.inverse(kernel(x2[k*32:n],layer)[0])
-    qc.append(gate2,range(n_qubits))
-    for i in range(k-1,-1,-1):
-        gate2 = QuantumCircuit.inverse(kernel(x2[i*32:(i+1)*32],layer)[0])
-        qc.append(gate2,range(8))
-        
+    for j in range(layer):
+        x_temp = [k*3**j for k in x2[k*32:n]]
+        gate2 = QuantumCircuit.inverse(kernel(x_temp,layer)[0])
+        qc.append(gate2,range(n_qubits))
+        for i in range(k-1,-1,-1):
+            x_temp = [k*3**j for k in x2[i*32:(i+1)*32]]
+            gate2 = QuantumCircuit.inverse(kernel(x_temp,layer)[0])
+            qc.append(gate2,range(8))
     qc.measure_all()
-
     shots = 5000
     qc_compiled = transpile(qc, backend=QasmSimulator())
     backend=QasmSimulator()
@@ -431,15 +434,17 @@ def kernel_regression(G_kr,y,index,sto_index,label=None):
     kr = kr.sort_values("index")
     plt.plot(kr.iloc[:,0],kr.iloc[:,1],label=label)
 
-def kernel_regression_MSE(G_kr,y,index,sto_index):
-    size = len(y)
-    kr = pd.DataFrame()
-    kr["index"] = index
-    kr["estimates"] = np.matmul(G_kr,y[sto_index])/sum(G_kr)
-    kr = kr.sort_values("index")
-    y_pred = interpolate(kr).iloc[:,1]
-    result = sum((y_pred-y)**2)/size
-    return(result)
+
+class Kernel_Regression():
+    def __init__(self,thre = 10**(-8)) :
+        self.thre = thre
+    
+    def fit(self,Y_train):
+        self.Y_train = Y_train
+
+    def predict(self,G_test):
+        return(np.matmul(G_test,self.Y_train)/np.apply_along_axis(np.sum,1,np.asarray(G_test)))
+
 
 class KPCA():
     def __init__(self,thre = 10**(-8)):
@@ -452,6 +457,7 @@ class KPCA():
         invorder = [n-i-1 for i in range(n)]
         V = eig[1][:,invorder]
         U = np.matmul(matpower(kernel_matrix,-0.5,self.thre),V)
+        self.candi_matrix = kernel_matrix
         self.coef = np.array(U)
         self.train_gram = kernel_matrix
         self.eigvalue = eig[0]
@@ -484,6 +490,7 @@ class GSIR():
         eig = np.linalg.eigh(candi_matrix)
         invorder = [n-i-1 for i in range(n)]
         V = eig[1][:,invorder]
+        self.candi_matrix = candi_matrix
         self.coef = np.matmul(np.matmul(Q,Ginv),V)
         self.train_gram = kernel_matrix
         self.eigvalue = eig[0]
@@ -495,23 +502,29 @@ class SVM():
     def __init__(self,lamda=1):
         self.lamda = lamda
     
-    def fit(self,kernel_matrix,y_train):
+    def fit(self,kernel_matrix,y_train_ori):
+
+        y_train = np.asarray(2.0*(y_train_ori==list(set(y_train_ori))[0])-1).reshape(-1)
+        k=1000
+
         n = len(kernel_matrix[0])
         upbound = 2*n*self.lamda
-        Q = matrix(kernel_matrix)
-        r = matrix(np.array([-1.0 for i in range(n)]))
+        Q_mat = np.matmul(np.matmul(np.diag(y_train),kernel_matrix),np.diag(y_train))
+        Q = matrix(Q_mat)
+        r = matrix(k*np.array([1.0 for i in range(n)]))
 
         G = matrix(np.concatenate([-np.eye(n),np.eye(n)]))
         h = matrix([0.0 for i in range(n)] + [upbound**(-1) for i in range(n)])
         A = matrix(y_train).T
         b = matrix(0.0)
 
-        sol = qp(Q,-r,G,h,A,b, kktsolver='ldl', options={'kktreg':1e-9,'show_progress': False})
+        sol = qp(Q,r,A,b,G,h, kktsolver='ldl', options={'kktreg':1e-9,'show_progress': False})
 
         c_sol = [sol["x"]]
         self.coef = [i for i in c_sol[0]]
         self.train_gram = kernel_matrix
         self.y_train = y_train
+        self.y_train_ori = y_train_ori
     
     def predict(self,kernel_matrix_pred):
         y_pred = np.sign(np.matmul((self.coef * self.y_train),kernel_matrix_pred))
@@ -519,9 +532,10 @@ class SVM():
     
     def score(self,kernel_matrix_pred,y_true):
         n = len(y_true)
-        y_pred = np.sign(np.matmul((self.coef * self.y_train),kernel_matrix_pred))
-        y_true = np.array(y_true)
+        y_true = np.asarray(2.0*(y_true==list(set(self.y_train_ori))[0])-1).reshape(-1)
+        y_pred = self.predict(kernel_matrix_pred)
         return(sum(y_pred==y_true)/n)
+
 
 
 ##################################################################
